@@ -50,21 +50,22 @@ void setup() {
     Serial.println("[INFO] DHT11 Sensor initialized successfully.");
 
     // Configure ESP32 Successive Approximation Register (SAR) ADC
-    analogReadResolution(12);        // Set ADC resolution to 12-bit (0 - 4095)
-    analogSetAttenuation(ADC_11db);  // Set attenuation to 11dB (Full-scale voltage approx. 3.3V)
+    // 12-bit resolution provides values from 0 to 4095
+    analogReadResolution(12);        
+    // 11dB attenuation allows reading voltages up to ~3.3V safely
+    analogSetAttenuation(ADC_11db);  
     Serial.println("[INFO] ADC configured to 12-bit resolution with 11dB attenuation.");
 
-    // Initialize Cloud Connectivity via Blynk
+    // Initialize Cloud Connectivity via Blynk IoT Platform
     Serial.println("[INFO] Establishing connection to Blynk IoT Cloud...");
-    // Blynk.begin handles network connection internally in a blocking manner at boot
     Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
 }
 
 void loop() {
-    // Maintain Blynk cloud keep-alives and process incoming events
+    // Maintain cloud keep-alives and process incoming network events
     Blynk.run();
 
-    // Event-driven sensor polling execution without using blocking delay()
+    // Event-driven sensor polling execution (Non-blocking design without delay())
     unsigned long currentMillis = millis();
     if (currentMillis - lastSensorReadTime >= SENSOR_INTERVAL) {
         lastSensorReadTime = currentMillis;
@@ -73,24 +74,24 @@ void loop() {
 }
 
 void processSystemSensors() {
-    // Read analog voltage from FSR voltage divider
+    // Read analog voltage from FSR voltage divider network
     int rawADC = analogRead(FSR_PIN);
-    float voltage = (rawADC * 3.3) / 4095.0; // Map ADC value to voltage
+    float voltage = (rawADC * 3.3) / 4095.0; // Map 12-bit ADC value to physical voltage
 
-    // Read climate metrics from DHT11
+    // Read climate metrics from the DHT11 sensor
     float temperature = dht.readTemperature();
     float humidity = dht.readHumidity();
 
-    // Check for sensor readout failures
+    // Check for sensor readout failures (Hardware disconnected or noise interference)
     if (isnan(temperature) || isnan(humidity)) {
         Serial.println("[ERROR] Failed to read from DHT sensor! Checking hardware line...");
         return;
     }
 
-    // Evaluate child occupancy condition
+    // Evaluate child occupancy condition based on physical weight
     bool isOccupied = (rawADC > WEIGHT_THRESHOLD);
 
-    // Print operational telemetry to hardware Serial Monitor for debugging
+    // Print operational telemetry to hardware Serial Monitor for debugging purposes
     Serial.printf("FSR ADC: %4d | Volts: %2.2fV | Temp: %2.1fC | Hum: %2.1f%% | State: %s\n", 
                   rawADC, voltage, temperature, humidity, isOccupied ? "OCCUPIED" : "EMPTY");
 
@@ -100,12 +101,13 @@ void processSystemSensors() {
     Blynk.virtualWrite(V3, humidity);
     Blynk.virtualWrite(V4, isOccupied ? 1 : 0);
 
-    // System Safety Logic Verification
+    // System Safety Logic Verification (Finite State Machine execution)
     if (isOccupied) {
         if (temperature >= TEMP_THRESHOLD) {
+            // Threshold exceeded - Trigger critical safety protocols
             executeCriticalAlarm();
         } else {
-            // Occupied but within medical safety thresholds
+            // Occupied but within medical safety thresholds (Safe State)
             digitalWrite(LED_PIN, HIGH); 
             digitalWrite(BUZZER_PIN, LOW);
         }
@@ -119,10 +121,10 @@ void processSystemSensors() {
 void executeCriticalAlarm() {
     Serial.println("[CRITICAL ALERT] Severe condition! Seat occupied under high temperature!");
     
-    // Actuate localized physical alarms
+    // Actuate localized physical alarms (NPN transistor driven buzzer)
     digitalWrite(BUZZER_PIN, HIGH);
     digitalWrite(LED_PIN, HIGH);
     
-    // Trigger remote cloud notifications via Blynk event handlers
+    // Trigger remote cloud notifications via Blynk event handlers (Push/SMS)
     Blynk.logEvent("critical_heat_alert", "Warning! Critical temperature detected in occupied child seat!");
 }
